@@ -12,6 +12,10 @@ import { OptimismPortal } from "./OptimismPortal.sol";
  *  - specifically making state claims right now to allow for other types of
  *    claims in the future
  *  - how to top up the bond?
+ * TODOs:
+ *  - events
+ *  - dispute game inteface in dispute-game-contracts repo
+ *  - define fault proof vm interface (should also work with validity proofs)
  */
 
 
@@ -49,7 +53,10 @@ contract Claims {
         CHALLENGER = _challenger;
         FINALIZATION_PERIOD_SECONDS = _finalizationPeriodSeconds;
     }
+        //  - remove time checking logic
 
+    // At a given L2 blocknumber, make a claim about an accounts storage by
+    // key/value
     function makeStateClaim(bytes32 _l2BlockHash, address _addr, bytes32 _key, bytes32 _value) public payable {
         // TODO: temporary, only allow claims about withdrawals
         require(_addr == Predeploys.L2_TO_L1_MESSAGE_PASSER);
@@ -92,6 +99,7 @@ contract Claims {
         require(success);
     }
 
+    // the game would be able to remove state claim in the permissionless case
     function removeStateClaim(bytes32 _l2BlockHash, address _addr, bytes32 _key) public {
         // only the challenger can remove state claims
         require(msg.sender == CHALLENGER);
@@ -127,6 +135,9 @@ contract Claims {
 /**
  * A higher level construction on top of Claims, specifically for withdrawals
  * Users interact with this for managing withdrawals
+ * TODO: consider alterations in withdrawal hashing, do we want to enforce
+ *       hashing on chain or just pass in the hash?
+ * - consider making part of Portal itself
  */
 contract WithdrawalClaims {
     Claims immutable CLAIMS;
@@ -137,6 +148,8 @@ contract WithdrawalClaims {
         PORTAL = OptimismPortal(_portal);
     }
 
+    // we can forward the Portal `proveWithdrawalTransaction` to call this to
+    // stay more backwards compatible
     function claimWithdrawalTransaction(Types.WithdrawalTransaction memory _tx, bytes32 _l2BlockHash) public payable {
         // compute the withdrawal hash
         bytes32 withdrawalHash = Hashing.hashWithdrawal(_tx);
@@ -159,7 +172,24 @@ contract WithdrawalClaims {
         });
     }
 
-    // TODO: reentrancy
+    function claimWithdrawalTransaction(bytes32 _withdrawalHash, bytes32 _l2BlockHash) public payable {
+        bytes32 storageKey = keccak256(
+            abi.encode(
+                withdrawalHash,
+                uint256(0)
+            )
+        );
+
+        // call the Claims contract with the correct schema
+        CLAIMS.makeStateClaim{ value: msg.value }({
+            _l2BlockHash: _l2BlockHash,
+            _addr: Predeploys.L2_TO_L1_MESSAGE_PASSER,
+            _key: storageKey,
+            _value: hex"01"
+        });
+    }
+
+    // TODO: maybe we want the interface to be on withdrawalHash
     function finalizeWithdrawalTransaction(Types.WithdrawalTransaction memory _tx, bytes32 _l2BlockHash) public {
         // compute the withdrawal hash
         bytes32 withdrawalHash = Hashing.hashWithdrawal(_tx);
@@ -174,7 +204,8 @@ contract WithdrawalClaims {
         );
 
         // This reverts if the claim is not finalized
-        // and returns the bond
+        // adds reentrancy protection
+        // returns the bond to the user
         CLAIMS.finalizeStateClaim({
             _l2BlockHash: _l2BlockHash,
             _addr: Predeploys.L2_TO_L1_MESSAGE_PASSER,
@@ -183,7 +214,6 @@ contract WithdrawalClaims {
 
         // Update the portal to:
         //  - only allow this contract to call `finalizeWithdrawalTransaction`
-        //  - remove proof checking logic
         //  - remove all time checking logic
         PORTAL.finalizeWithdrawalTransaction(_tx);
     }
@@ -204,6 +234,7 @@ contract ThresholdClaimsChallenger {
     uint256 scalar constant = 100;
     // track the number of challengers
     uint256 challengerCount;
+        //  - remove time checking logic
     // the challengers that can remove state claims
     mapping(address => bool) challengers;
     // mapping of challenge counts by L2 block number to account to slot
@@ -240,6 +271,8 @@ contract ThresholdClaimsChallenger {
         require(challengerCount != 0);
     }
 
+    // race condition prone? break into challenge + finalize?
+    // TODO: make this eip712 based
     function challengeStateClaim(bytes32 _l2BlockHash, address _addr, bytes32 _key) public {
         require(challengers[msg.sender] == true);
 
