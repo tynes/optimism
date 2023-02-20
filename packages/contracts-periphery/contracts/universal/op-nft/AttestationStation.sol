@@ -11,6 +11,21 @@ import { Semver } from "@eth-optimism/contracts-bedrock/contracts/universal/Semv
  */
 contract AttestationStation is Semver {
     /**
+     * @notice Emitted when Attestation is created.
+     *
+     * @param creator Address that made the attestation.
+     * @param about   Address attestation is about.
+     * @param key     Key of the attestation.
+     * @param val     Value of the attestation.
+     */
+    event AttestationCreated(
+        address indexed creator,
+        address indexed about,
+        bytes32 indexed key,
+        bytes val
+    );
+
+    /**
      * @notice Struct representing data that is being attested.
      *
      * @custom:field about Address for which the attestation is about.
@@ -29,24 +44,33 @@ contract AttestationStation is Semver {
     mapping(address => mapping(address => mapping(bytes32 => bytes))) public attestations;
 
     /**
-     * @notice Emitted when Attestation is created.
-     *
-     * @param creator Address that made the attestation.
-     * @param about   Address attestation is about.
-     * @param key     Key of the attestation.
-     * @param val     Value of the attestation.
+     * @notice
      */
-    event AttestationCreated(
-        address indexed creator,
-        address indexed about,
-        bytes32 indexed key,
-        bytes val
-    );
+    bytes32 public constant TX_TYPEHASH =
+        keccak256("PermitAttest(address about, bytes32 key, bytes about)");
 
     /**
-     * @custom:semver 1.1.0
+     * @notice
      */
-    constructor() Semver(1, 1, 0) {}
+    bytes32 public _DOMAIN_SEPARATOR;
+
+    /**
+     * @custom:semver 1.2.0
+     */
+    constructor() Semver(1, 2, 0) {
+        bytes32 hash = keccak256(
+            "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+        );
+        _DOMAIN_SEPARATOR = keccak256(
+            abi.encode(
+                hash,
+                keccak256("AttestationStation"),
+                keccak256(bytes("1")),
+                block.chainid,
+                address(this)
+            )
+        );
+    }
 
     /**
      * @notice Allows anyone to create an attestation.
@@ -81,5 +105,47 @@ contract AttestationStation is Semver {
                 ++i;
             }
         }
+    }
+
+    /**
+     * @notice Allows a smart contract to attest on behalf of a user using EIP-712
+     *
+     * @param _about Address that the attestation is about.
+     * @param _key   A key used to namespace the attestation.
+     * @param _val   An arbitrary value stored as part of the attestation.
+     * @param _v     EIP712 ECDSA recovery parameter.
+     * @param _r     EIP712 ECDSA `r` value.
+     * @param _s     EIP712 ECDSA `s` value.
+     */
+    function permitAttest(
+        address _about,
+        bytes32 _key,
+        bytes memory _val,
+        uint8 _v,
+        bytes32 _r,
+        bytes32 _s
+    ) external {
+        address sender = ecrecover712(_about, _key, _val, _v, _r, _s);
+        attestations[sender][_about][_key] = _val;
+
+        emit AttestationCreated(sender, _about, _key, _val);
+    }
+
+    /**
+     * @notice
+     */
+    function ecrecover712(
+        address _about,
+        bytes32 _key,
+        bytes memory _val,
+        uint8 _v,
+        bytes32 _r,
+        bytes32 _s
+    ) internal view returns (address) {
+        bytes32 hashStruct = keccak256(abi.encode(TX_TYPEHASH, _about, _key, _val));
+        bytes32 h = keccak256(abi.encodePacked("\x19\x01", _DOMAIN_SEPARATOR, hashStruct));
+        address signer = ecrecover(h, _v, _r, _s);
+        require(signer != address(0), "AttestationStation: invalid signature");
+        return signer;
     }
 }
