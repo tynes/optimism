@@ -219,12 +219,12 @@ func (p *AppendSequencerBatchParams) Write(
 
 	// There must be contexts if there are transactions
 	if len(p.Contexts) == 0 && len(p.Txs) != 0 {
-		return ErrMalformedBatch
+		return fmt.Errorf("%w: found txs with no contexts", ErrMalformedBatch)
 	}
 
 	// There must be transactions if there are contexts
 	if len(p.Txs) == 0 && len(p.Contexts) != 0 {
-		return ErrMalformedBatch
+		return fmt.Errorf("%w: found contexts with no txs", ErrMalformedBatch)
 	}
 
 	// copy the contexts as to not malleate the struct

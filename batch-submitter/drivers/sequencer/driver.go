@@ -173,6 +173,8 @@ func (d *Driver) CraftBatchTx(
 		hasLargeNextTx bool
 	)
 	for i := new(big.Int).Set(start); i.Cmp(end) < 0; i.Add(i, bigOne) {
+		log.Trace(name+" fetching block", "number", i)
+
 		block, err := d.cfg.L2Client.BlockByNumber(ctx, i)
 		if err != nil {
 			return nil, err
@@ -181,6 +183,9 @@ func (d *Driver) CraftBatchTx(
 		// For each sequencer transaction, update our running total with the
 		// size of the transaction.
 		batchElement := BatchElementFromBlock(block)
+		log.Trace(name+" got batch element", "timestamp", batchElement.Timestamp,
+			"block-number", batchElement.BlockNumber, "is-sequencer-tx", batchElement.IsSequencerTx())
+
 		if batchElement.IsSequencerTx() {
 			// Abort once the total size estimate is greater than the maximum
 			// configured size. This is a conservative estimate, as the total
@@ -203,6 +208,8 @@ func (d *Driver) CraftBatchTx(
 		batchElements = append(batchElements, batchElement)
 	}
 
+	log.Trace(name+" built batch elements", "count", len(batchElements))
+
 	shouldStartAt := start.Uint64()
 	var pruneCount int
 	for {
@@ -212,6 +219,10 @@ func (d *Driver) CraftBatchTx(
 		if err != nil {
 			return nil, err
 		}
+
+		log.Trace(name+" generated batch params", "should-start-at-element", batchParams.ShouldStartAtElement,
+			"total-elements-to-append", batchParams.TotalElementsToAppend, "context-count", len(batchParams.Contexts),
+			"tx-count", len(batchParams.Txs))
 
 		// Encode the batch arguments using the configured encoding type.
 		batchArguments, err := batchParams.Serialize(d.cfg.BatchType)

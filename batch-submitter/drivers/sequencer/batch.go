@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/ethereum/go-ethereum/log"
+
 	l2types "github.com/ethereum-optimism/optimism/l2geth/core/types"
 )
 
@@ -79,6 +81,7 @@ func GenSequencerBatchParams(
 	blockOffset uint64,
 	batch []BatchElement,
 ) (*AppendSequencerBatchParams, error) {
+	log.Trace("generating sequencer batch params", "start", shouldStartAtElement, "offset", blockOffset, "batch-count", len(batch))
 
 	var (
 		contexts               []BatchContext
@@ -105,7 +108,7 @@ func GenSequencerBatchParams(
 	//  - [q] [q s]   // INVALID: consecutive queued txs are split
 	//  - [q q] [s]   // correct split for preceding case
 	//  - [s q] [s q] // alternating sequencer tx interleaved with queued
-	for _, el := range batch {
+	for i, el := range batch {
 		// To enforce the above groupings, the following condition is
 		// used to determine when to create a new batch:
 		//  - On the first pass, or
@@ -119,10 +122,15 @@ func GenSequencerBatchParams(
 		// preceding tx.
 		needsNewGroupOnSequencerTx := !lastBlockIsSequencerTx ||
 			el.BlockNumber != lastBlockNumber
+
+		if needsNewGroupOnSequencerTx {
+			log.Trace("needs new group on sequencer tx", "element", i)
+		}
+
 		if len(groupedBlocks) == 0 ||
 			el.Timestamp != lastTimestamp ||
 			(el.IsSequencerTx() && needsNewGroupOnSequencerTx) {
-
+			log.Trace("appending empty grouped block")
 			groupedBlocks = append(groupedBlocks, groupedBlock{})
 		}
 
@@ -137,9 +145,11 @@ func GenSequencerBatchParams(
 			// the calldata of the batch tx submitted to the L1 CTC
 			// contract.
 			txs = append(txs, el.Tx)
+			log.Trace("appending sequencer tx to batch", "element", i, "grouped-block-number", cur)
 		} else {
 			groupedBlocks[cur].queued =
 				append(groupedBlocks[cur].queued, el)
+			log.Trace("appending queued tx to batch", "element", i, "grouped-block-number", cur)
 		}
 
 		lastBlockIsSequencerTx = el.IsSequencerTx()
@@ -147,10 +157,15 @@ func GenSequencerBatchParams(
 		lastBlockNumber = el.BlockNumber
 	}
 
+	log.Trace("done processing batch elements", "last-block-is-sequencer-tx", lastBlockIsSequencerTx,
+		"last-timestamp", lastTimestamp, "last-blocknumber", lastBlockNumber)
+
 	// For each group, construct the resulting BatchContext.
-	for _, block := range groupedBlocks {
+	for i, block := range groupedBlocks {
 		numSequencedTxs := uint64(len(block.sequenced))
 		numSubsequentQueueTxs := uint64(len(block.queued))
+
+		log.Trace("processing grouped block", "element", i, "num-sequenced-txs", numSequencedTxs, "num-queue-txs", numSubsequentQueueTxs)
 
 		// Ensure at least one tx was included in this group.
 		if numSequencedTxs == 0 && numSubsequentQueueTxs == 0 {
@@ -175,12 +190,18 @@ func GenSequencerBatchParams(
 			blockNumber = block.queued[0].BlockNumber
 		}
 
-		contexts = append(contexts, BatchContext{
+		batchContext := BatchContext{
 			NumSequencedTxs:       numSequencedTxs,
 			NumSubsequentQueueTxs: numSubsequentQueueTxs,
 			Timestamp:             timestamp,
 			BlockNumber:           blockNumber,
-		})
+		}
+
+		log.Trace("creating batch context", "num-sequenced-txs", batchContext.NumSequencedTxs,
+			"num-queue-txs", batchContext.NumSubsequentQueueTxs, "timestamp", batchContext.Timestamp,
+			"block-number", batchContext.BlockNumber)
+
+		contexts = append(contexts, batchContext)
 	}
 
 	return &AppendSequencerBatchParams{
