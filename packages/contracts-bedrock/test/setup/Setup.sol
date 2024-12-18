@@ -49,6 +49,8 @@ import { IWETH98 } from "interfaces/universal/IWETH98.sol";
 import { IGovernanceToken } from "interfaces/governance/IGovernanceToken.sol";
 import { ILegacyMessagePasser } from "interfaces/legacy/ILegacyMessagePasser.sol";
 import { ISuperchainTokenBridge } from "interfaces/L2/ISuperchainTokenBridge.sol";
+import { IEAS } from "src/vendor/eas/IEAS.sol";
+import { ISchemaRegistry } from "src/vendor/eas/ISchemaRegistry.sol";
 
 /// @title Setup
 /// @dev This contact is responsible for setting up the contracts in state. It currently
@@ -112,7 +114,9 @@ contract Setup {
     ISuperchainTokenBridge superchainTokenBridge = ISuperchainTokenBridge(Predeploys.SUPERCHAIN_TOKEN_BRIDGE);
     IOptimismSuperchainERC20Factory l2OptimismSuperchainERC20Factory =
         IOptimismSuperchainERC20Factory(Predeploys.OPTIMISM_SUPERCHAIN_ERC20_FACTORY);
-
+    IEAS eas = IEAS(Predeploys.EAS);
+    ISchemaRegistry schemaRegistry = ISchemaRegistry(Predeploys.SCHEMA_REGISTRY);
+    
     /// @notice Indicates whether a test is running against a forked production network.
     function isForkTest() public view returns (bool) {
         return _isForkTest;
