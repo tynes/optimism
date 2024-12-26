@@ -117,7 +117,7 @@ participant opnodeB as op-node B
 Note over opnodeA: on new block
 
 opnodeA ->> opgethA: engine process unsafe block
-opgethA -->> opnodeA: engine proccessed unsafe block
+opgethA -->> opnodeA: engine processed unsafe block
 opnodeA ->> opsup: update Local unsafe
 opnodeB ->> opsup: update Local unsafe (maybe)
 opsup ->> opgethA: Fetch receipts
@@ -271,7 +271,7 @@ Full support for chain reorgs (detecting them, and resolving them) is the
 next priority after the above architecture and data changes.
 
 Further background on the design-choices of op-supervisor can be found in the
-[superchain backend desgin-doc](https://github.com/ethereum-optimism/design-docs/blob/main/protocol/superchain-backend.md).
+[superchain backend design-doc](https://github.com/ethereum-optimism/design-docs/blob/main/protocol/superchain-backend.md).
 
 ## Design principles
 
@@ -290,7 +290,7 @@ such that a chain which does not take on new interop dependencies, can continue 
 
 I.e. safety must be guaranteed at all times,
 but a minimal level of liveness can be maintained by holding off on cross-chain message acceptance
-while allowing regular single-chain functionaltiy to proceed.
+while allowing regular single-chain functionality to proceed.
 
 ## Testing
 
