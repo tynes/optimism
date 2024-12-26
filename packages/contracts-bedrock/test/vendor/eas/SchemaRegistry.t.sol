@@ -41,7 +41,7 @@ contract SchemaRegistryTest is CommonTest {
 
     /// @dev Verifies that the registry returns the correct version number
     function testVersion() public view {
-        assertEq(ISemver(address(schemaRegistry)).version(), "1.3.1-beta.1");
+        assertEq(ISemver(address(schemaRegistry)).version(), "1.3.1-beta.2");
     }
 
     // Basic Functionality Tests
