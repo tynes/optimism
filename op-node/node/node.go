@@ -26,7 +26,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-node/rollup/event"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/finality"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/interop"
-	"github.com/ethereum-optimism/optimism/op-node/rollup/interop/managed"
+	"github.com/ethereum-optimism/optimism/op-node/rollup/interop/indexing"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/sequencing"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/status"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/sync"
@@ -410,12 +410,12 @@ func (n *OpNode) initL2(ctx context.Context, cfg *Config) error {
 		return err
 	}
 
-	managedMode := false
+	indexingMode := false
 	sys, err := cfg.InteropConfig.Setup(ctx, n.log, &n.cfg.Rollup, n.l1Source, n.l2Source, n.metrics)
 	if err != nil {
 		return fmt.Errorf("failed to setup interop: %w", err)
 	} else if sys != nil { // we continue with legacy mode if no interop sub-system is set up.
-		_, managedMode = sys.(*managed.ManagedMode)
+		_, indexingMode = sys.(*indexing.IndexingMode)
 		n.interopSys = sys
 		n.eventSys.Register("interop", n.interopSys)
 	}
@@ -447,7 +447,7 @@ func (n *OpNode) initL2(ctx context.Context, cfg *Config) error {
 	}
 
 	n.l2Driver = driver.NewDriver(n.eventSys, n.eventDrain, &cfg.Driver, &cfg.Rollup, cfg.DependencySet, n.l2Source, n.l1Source,
-		n.beacon, n, n, n.log, n.metrics, cfg.ConfigPersistence, n.safeDB, &cfg.Sync, sequencerConductor, altDA, managedMode)
+		n.beacon, n, n, n.log, n.metrics, cfg.ConfigPersistence, n.safeDB, &cfg.Sync, sequencerConductor, altDA, indexingMode)
 	return nil
 }
 
@@ -781,7 +781,7 @@ func (n *OpNode) HTTPPort() (int, error) {
 }
 
 func (n *OpNode) InteropRPC() (rpcEndpoint string, jwtSecret eth.Bytes32) {
-	m, ok := n.interopSys.(*managed.ManagedMode)
+	m, ok := n.interopSys.(*indexing.IndexingMode)
 	if !ok {
 		return "", [32]byte{}
 	}
@@ -789,7 +789,7 @@ func (n *OpNode) InteropRPC() (rpcEndpoint string, jwtSecret eth.Bytes32) {
 }
 
 func (n *OpNode) InteropRPCPort() (int, error) {
-	m, ok := n.interopSys.(*managed.ManagedMode)
+	m, ok := n.interopSys.(*indexing.IndexingMode)
 	if !ok {
 		return 0, fmt.Errorf("failed to fetch interop port for op-node")
 	}

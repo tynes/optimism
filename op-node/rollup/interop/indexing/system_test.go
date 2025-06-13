@@ -1,4 +1,4 @@
-package managed
+package indexing
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/testutils"
 )
 
-func TestManagedMode_findLatestValidLocalUnsafe(t *testing.T) {
+func TestIndexingMode_findLatestValidLocalUnsafe(t *testing.T) {
 	tests := []struct {
 		name           string
 		l2Unsafe       uint64   // starting point (trusted valid)
@@ -147,13 +147,13 @@ func TestManagedMode_findLatestValidLocalUnsafe(t *testing.T) {
 				}
 			}
 
-			managedMode := &ManagedMode{
+			indexingMode := &IndexingMode{
 				log: logger,
 				l1:  mockL1,
 				l2:  mockL2,
 			}
 
-			result, err := managedMode.findLatestValidLocalUnsafe(ctx, eth.BlockID{
+			result, err := indexingMode.findLatestValidLocalUnsafe(ctx, eth.BlockID{
 				Hash:   l2UnsafeHash,
 				Number: tt.l2Unsafe,
 			})

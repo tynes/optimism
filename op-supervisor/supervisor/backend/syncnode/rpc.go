@@ -7,7 +7,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/ethereum-optimism/optimism/op-node/rollup/interop/managed"
+	"github.com/ethereum-optimism/optimism/op-node/rollup/interop/indexing"
 	"github.com/ethereum-optimism/optimism/op-service/rpc"
 	"github.com/ethereum-optimism/optimism/op-supervisor/supervisor/backend/processors"
 
@@ -169,7 +169,7 @@ func (rs *RPCSyncNode) AnchorPoint(ctx context.Context) (types.DerivedBlockRefPa
 	)
 	err := rs.cl.CallContext(ctx, &out, "interop_anchorPoint")
 	// Translate an interop-inactive error into a ErrFuture.
-	if errors.As(err, &jsonErr) && jsonErr.ErrorCode() == managed.InteropInactiveRPCErrCode {
+       if errors.As(err, &jsonErr) && jsonErr.ErrorCode() == indexing.InteropInactiveRPCErrCode {
 		return types.DerivedBlockRefPair{}, types.ErrFuture
 	}
 	return out, err

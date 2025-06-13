@@ -1,4 +1,4 @@
-package managed
+package indexing
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 )
 
 type InteropAPI struct {
-	backend *ManagedMode
+	backend *IndexingMode
 }
 
 func (ib *InteropAPI) PullEvent() (*supervisortypes.ManagedEvent, error) {
