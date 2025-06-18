@@ -12,10 +12,13 @@ import (
 
 	"github.com/ethereum-optimism/optimism/op-node/rollup/event"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
+	"github.com/ethereum-optimism/optimism/op-service/sources/caching"
 	"github.com/ethereum-optimism/optimism/op-supervisor/supervisor/backend/superevents"
 )
 
 const reqTimeout = time.Second * 10
+
+const cacheSize = 100
 
 var errNoL1Source = errors.New("no L1 source configured")
 
@@ -49,6 +52,13 @@ type L1Accessor struct {
 
 	// to interrupt requests, so the system can shut down quickly
 	sysCtx context.Context
+
+	// cache of recently fetched L1 block references
+	cache *caching.LRUCache[uint64, eth.L1BlockRef]
+}
+
+func (p *L1Accessor) resetCache() {
+	p.cache = caching.NewLRUCache[uint64, eth.L1BlockRef](nil, "l1blockrefs", cacheSize)
 }
 
 var _ event.AttachEmitter = (*L1Accessor)(nil)
@@ -60,6 +70,7 @@ func NewL1Accessor(sysCtx context.Context, log log.Logger, client L1Source) *L1A
 		// placeholder confirmation depth
 		confDepth: 2,
 		sysCtx:    sysCtx,
+		cache:     caching.NewLRUCache[uint64, eth.L1BlockRef](nil, "l1blockrefs", cacheSize),
 	}
 }
 
@@ -86,6 +97,7 @@ func (p *L1Accessor) AttachClient(client L1Source, subscribe bool) {
 	p.UnsubscribeLatestHandler()
 
 	p.client = client
+	p.resetCache()
 
 	if client != nil && subscribe {
 		p.SubscribeLatestHandler()
@@ -185,6 +197,8 @@ func (p *L1Accessor) onLatest(ctx context.Context, ref eth.L1BlockRef) {
 			IncomingBlock: ref.ID(),
 		})
 		p.log.Info("Reorg detected", "ref", ref)
+		// clear cached block references to avoid serving stale data
+		p.resetCache()
 	}
 
 	// Update the tip
@@ -202,5 +216,12 @@ func (p *L1Accessor) L1BlockRefByNumber(ctx context.Context, number uint64) (eth
 	if number > p.tip.Number-p.confDepth {
 		return eth.L1BlockRef{}, ethereum.NotFound
 	}
-	return p.client.L1BlockRefByNumber(ctx, number)
+	if ref, ok := p.cache.Get(number); ok {
+		return ref, nil
+	}
+	ref, err := p.client.L1BlockRefByNumber(ctx, number)
+	if err == nil {
+		p.cache.Add(number, ref)
+	}
+	return ref, err
 }

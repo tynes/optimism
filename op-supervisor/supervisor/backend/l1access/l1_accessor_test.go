@@ -9,6 +9,7 @@ import (
 
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
+	"github.com/ethereum/go-ethereum/common"
 )
 
 type mockL1Source struct {
@@ -58,4 +59,39 @@ func TestL1Accessor(t *testing.T) {
 	accessor.AttachClient(source2, false)
 	require.Equal(t, source2, accessor.client)
 
+}
+
+// TestL1AccessorCaching verifies that repeated requests for the same block
+// number hit the cache instead of the underlying source and that the cache is
+// cleared on reorg events.
+func TestL1AccessorCaching(t *testing.T) {
+	log := testlog.Logger(t, slog.LevelDebug)
+	calls := 0
+	source := &mockL1Source{}
+	source.l1BlockRefByNumberFn = func(ctx context.Context, number uint64) (eth.L1BlockRef, error) {
+		calls++
+		return eth.L1BlockRef{Number: number}, nil
+	}
+
+	accessor := NewL1Accessor(context.Background(), log, source)
+	accessor.tip = eth.BlockID{Hash: common.Hash{0xaa}, Number: 20}
+
+	// first call should query the source
+	_, err := accessor.L1BlockRefByNumber(context.Background(), 5)
+	require.NoError(t, err)
+	require.Equal(t, 1, calls)
+
+	// second call should be served from cache
+	_, err = accessor.L1BlockRefByNumber(context.Background(), 5)
+	require.NoError(t, err)
+	require.Equal(t, 1, calls)
+
+	// trigger a reorg to clear the cache
+	accessor.tip = eth.BlockID{Hash: common.Hash{0xbb}, Number: 20}
+	accessor.onLatest(context.Background(), eth.L1BlockRef{Number: 21, ParentHash: common.Hash{0xcc}, Hash: common.Hash{0xdd}})
+
+	// cached value should be gone, expect another call to source
+	_, err = accessor.L1BlockRefByNumber(context.Background(), 5)
+	require.NoError(t, err)
+	require.Equal(t, 2, calls)
 }
