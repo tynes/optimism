@@ -13,6 +13,7 @@ import (
 type ProposerDriver interface {
 	StartL2OutputSubmitting() error
 	StopL2OutputSubmitting() error
+	Propose(ctx context.Context, sequenceNumber *uint64) error
 }
 
 type adminAPI struct {
@@ -42,4 +43,8 @@ func (a *adminAPI) StartProposer(_ context.Context) error {
 
 func (a *adminAPI) StopProposer(ctx context.Context) error {
 	return a.b.StopL2OutputSubmitting()
+}
+
+func (a *adminAPI) Propose(ctx context.Context, sequenceNumber *uint64) error {
+	return a.b.Propose(ctx, sequenceNumber)
 }

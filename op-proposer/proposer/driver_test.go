@@ -132,3 +132,26 @@ func TestL2OutputSubmitter_OutputRetry(t *testing.T) {
 	require.NotNil(t, logs.FindLog(testlog.NewMessageFilter("Proposer tx successfully published")))
 	require.NotNil(t, logs.FindLog(testlog.NewMessageFilter("loop returning")))
 }
+
+func TestL2OutputSubmitter_Propose(t *testing.T) {
+	ps, ep, _, _, txmgr, logs := setup(t, "L2OO")
+
+	blockNum := uint64(10)
+	ep.rollupClient.ExpectOutputAtBlock(blockNum, &eth.OutputResponse{
+		Version:  eth.OutputVersionV0,
+		BlockRef: eth.L2BlockRef{Number: blockNum},
+		Status: &eth.SyncStatus{
+			CurrentL1:   eth.L1BlockRef{Hash: common.Hash{}},
+			FinalizedL2: eth.L2BlockRef{Number: blockNum},
+			HeadL1:      eth.L1BlockRef{Number: 0},
+		},
+	}, nil)
+
+	err := ps.Propose(context.Background(), &blockNum)
+	require.NoError(t, err)
+
+	ep.rollupClient.AssertExpectations(t)
+	txmgr.AssertExpectations(t)
+
+	require.NotNil(t, logs.FindLog(testlog.NewMessageFilter("Proposer tx successfully published")))
+}

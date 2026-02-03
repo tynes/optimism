@@ -11,6 +11,7 @@ import (
 
 	"github.com/ethereum-optimism/optimism/op-proposer/contracts"
 	"github.com/ethereum-optimism/optimism/op-proposer/metrics"
+	driverrpc "github.com/ethereum-optimism/optimism/op-proposer/proposer/rpc"
 	"github.com/ethereum-optimism/optimism/op-proposer/proposer/source"
 	"github.com/ethereum-optimism/optimism/op-service/dial"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
@@ -286,7 +287,10 @@ func (l *L2OutputSubmitter) loop() {
 				continue
 			}
 
-			l.proposeOutput(ctx, proposal)
+			if err := l.proposeOutput(ctx, proposal); err != nil {
+				// Error already logged inside proposeOutput
+				continue
+			}
 		case <-l.done:
 			return
 		}
@@ -311,7 +315,7 @@ func (l *L2OutputSubmitter) waitNodeSync() error {
 	})
 }
 
-func (l *L2OutputSubmitter) proposeOutput(ctx context.Context, output source.Proposal) {
+func (l *L2OutputSubmitter) proposeOutput(ctx context.Context, output source.Proposal) error {
 	cCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 
@@ -326,11 +330,36 @@ func (l *L2OutputSubmitter) proposeOutput(ctx context.Context, output source.Pro
 			logCtx = append(logCtx, "l1head", output.Legacy.HeadL1.Number)
 		}
 		l.Log.Error("Failed to send proposal transaction", logCtx...)
-		return
+		return err
 	}
 	l.Metr.RecordL2Proposal(output.SequenceNum)
 	if output.Legacy.BlockRef != (eth.L2BlockRef{}) {
 		// Record legacy metrics when available
 		l.Metr.RecordL2BlocksProposed(output.Legacy.BlockRef)
 	}
+	return nil
 }
+
+// Propose fetches and submits the output for the specified block number.
+// If no block number is provided, the latest synced block is proposed.
+func (l *L2OutputSubmitter) Propose(ctx context.Context, block *uint64) error {
+	var blockNum uint64
+	if block == nil {
+		num, err := l.FetchCurrentBlockNumber(ctx)
+		if err != nil {
+			return err
+		}
+		blockNum = num
+	} else {
+		blockNum = *block
+	}
+
+	output, err := l.FetchOutput(ctx, blockNum)
+	if err != nil {
+		return err
+	}
+
+	return l.proposeOutput(ctx, output)
+}
+
+var _ driverrpc.ProposerDriver = (*L2OutputSubmitter)(nil)
